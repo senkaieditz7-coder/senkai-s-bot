@@ -144,4 +144,15 @@ async function startBot() {
   client.login(TOKEN);
 }
 
-startBot();
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled promise rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught exception:', err);
+});
+
+startBot().catch((err) => {
+  console.error('❌ Fatal error during bot startup:', err);
+  process.exit(1);
+});
