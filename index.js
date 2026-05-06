@@ -1,4 +1,4 @@
-require('dotenv').config(); // optional for local use
+require('dotenv').config();
 
 const {
   Client,
@@ -11,12 +11,16 @@ const {
 
 const fs = require('fs');
 const path = require('path');
-const db = require('./database');
 
-// 🔐 TOKEN (Railway variable)
+let db;
+try {
+  db = require('./database');
+} catch (err) {
+  console.error("❌ database.js failed to load:", err);
+}
+
+// 🔐 TOKEN
 const TOKEN = process.env.DISCORD_TOKEN;
-
-const OWNER_ID = '1461290677647179816';
 
 // Channels
 const COMMAND_CHANNELS = ['1492918524878786563', '1492918525105275033'];
@@ -33,7 +37,7 @@ const REWARD_COOLDOWN_MS = 120000;
 const userLastMessage = new Map();
 const userRewardCooldown = new Map();
 
-// 🚨 CRASH PROTECTION (IMPORTANT)
+// 💥 CRASH PROTECTION
 process.on('unhandledRejection', console.error);
 process.on('uncaughtException', console.error);
 
@@ -51,23 +55,34 @@ async function main() {
   try {
     console.log("🚀 Bot starting...");
 
-    // DB init safety
+    // SAFE DB INIT
     if (db && db.init) {
-      await db.init();
-      console.log("🗄️ Database ready");
+      try {
+        await db.init();
+        console.log("🗄️ Database loaded");
+      } catch (err) {
+        console.error("❌ Database init failed:", err);
+      }
     }
 
-    // Load commands
+    // LOAD COMMANDS SAFELY
     const commandsPath = path.join(__dirname, 'commands');
+
     if (fs.existsSync(commandsPath)) {
       const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
+
       for (const file of files) {
-        const cmd = require(path.join(commandsPath, file));
-        if (cmd.name && cmd.execute) {
-          client.commands.set(cmd.name, cmd);
+        try {
+          const cmd = require(path.join(commandsPath, file));
+          if (cmd.name && cmd.execute) {
+            client.commands.set(cmd.name, cmd);
+          }
+        } catch (err) {
+          console.error(`❌ Command failed to load: ${file}`, err);
         }
       }
-      console.log(`📦 Loaded ${client.commands.size} commands`);
+
+      console.log(`📦 Commands loaded: ${client.commands.size}`);
     }
 
     client.once(Events.ClientReady, () => {
@@ -79,10 +94,6 @@ async function main() {
 
       const isAdmin = message.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
-      if (message.author.id === OWNER_ID && message.content === 'Hi kids') {
-        return message.reply('Hi Master! Was it a hardworking day! Keep up the good work :)');
-      }
-
       if (message.content.startsWith(PREFIX)) {
         const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
         const commandName = args.shift()?.toLowerCase();
@@ -91,24 +102,21 @@ async function main() {
         if (!command) return;
 
         if (!COMMAND_CHANNELS.includes(message.channel.id) && !isAdmin) {
-          return message.reply(`❌ Please use bot commands in <#${COMMAND_CHANNELS[0]}>`);
+          return message.reply(`❌ Use commands in <#${COMMAND_CHANNELS[0]}>`);
         }
 
         try {
           await command.execute(message, args, client);
         } catch (err) {
-          console.error("Command error:", err);
-          message.reply('❌ Error running command.');
+          console.error("❌ Command error:", err);
         }
         return;
       }
 
       if (!REWARD_CHANNELS.includes(message.channel.id)) return;
 
-      const IGNORED_PREFIXES = ['?', '!', '£', '$'];
-      if (IGNORED_PREFIXES.some(p => message.content.startsWith(p))) return;
-
-      if (message.content.length < 3) return;
+      const IGNORED = ['?', '!', '£', '$'];
+      if (IGNORED.some(p => message.content.startsWith(p))) return;
 
       const userId = message.author.id;
       const now = Date.now();
@@ -120,27 +128,27 @@ async function main() {
       const lastReward = userRewardCooldown.get(userId) || 0;
       if (now - lastReward < REWARD_COOLDOWN_MS) return;
 
-      const count = db.incrementMessage(userId);
+      if (db && db.incrementMessage) {
+        const count = db.incrementMessage(userId);
 
-      if (count >= MESSAGES_NEEDED) {
-        db.addCoins(userId, MESSAGE_REWARD_AMOUNT);
-        userRewardCooldown.set(userId, now);
+        if (count >= MESSAGES_NEEDED && db.addCoins) {
+          db.addCoins(userId, MESSAGE_REWARD_AMOUNT);
+          userRewardCooldown.set(userId, now);
 
-        await message.channel.send({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(0x2ecc71)
-              .setDescription(`💬 ${message.author} earned **${MESSAGE_REWARD_AMOUNT} coins**!`)
-          ]
-        });
+          await message.channel.send({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0x2ecc71)
+                .setDescription(`💬 ${message.author} earned **${MESSAGE_REWARD_AMOUNT} coins**!`)
+            ]
+          });
+        }
       }
     });
 
-    client.on('error', console.error);
-
-    // 🔐 TOKEN CHECK
+    // TOKEN CHECK
     if (!TOKEN) {
-      console.error("❌ DISCORD_TOKEN is missing in Railway Variables!");
+      console.error("❌ DISCORD_TOKEN missing in Railway Variables!");
       process.exit(1);
     }
 
