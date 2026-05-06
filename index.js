@@ -12,7 +12,6 @@ const {
 const fs = require('fs');
 const path = require('path');
 
-// 🔐 TOKEN
 const TOKEN = process.env.DISCORD_TOKEN;
 
 // Channels
@@ -30,7 +29,7 @@ const REWARD_COOLDOWN_MS = 120000;
 const userLastMessage = new Map();
 const userRewardCooldown = new Map();
 
-// 💥 prevent crashes
+// 💥 safety nets
 process.on('unhandledRejection', console.error);
 process.on('uncaughtException', console.error);
 
@@ -45,19 +44,19 @@ const client = new Client({
 client.commands = new Collection();
 
 async function main() {
-  console.log("🚀 Bot starting...");
+  console.log("🚀 Starting bot...");
 
-  // SAFE DB LOAD
+  // load DB safely
   let db = null;
   try {
     db = require('./database');
     if (db?.init) await db.init();
-    console.log("🗄️ DB loaded");
-  } catch (err) {
-    console.log("⚠️ DB skipped (safe mode)");
+    console.log("🗄️ Database ready");
+  } catch (e) {
+    console.log("⚠️ Database disabled (error ignored)");
   }
 
-  // SAFE COMMAND LOADER
+  // load commands safely
   try {
     const commandsPath = path.join(__dirname, 'commands');
 
@@ -70,15 +69,15 @@ async function main() {
           if (cmd.name && cmd.execute) {
             client.commands.set(cmd.name, cmd);
           }
-        } catch (err) {
-          console.log("❌ Command skipped:", file);
+        } catch (e) {
+          console.log(`❌ Skipped command: ${file}`);
         }
       }
     }
 
     console.log(`📦 Commands loaded: ${client.commands.size}`);
   } catch (e) {
-    console.log("⚠️ Commands system disabled");
+    console.log("⚠️ Command system disabled");
   }
 
   client.once(Events.ClientReady, () => {
@@ -91,6 +90,7 @@ async function main() {
 
       const isAdmin = message.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
+      // commands
       if (message.content.startsWith(PREFIX)) {
         const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
         const commandName = args.shift()?.toLowerCase();
@@ -105,11 +105,12 @@ async function main() {
         try {
           await command.execute(message, args, client);
         } catch (err) {
-          console.error("CMD ERROR:", err);
+          console.error("Command error:", err);
         }
         return;
       }
 
+      // rewards
       if (!REWARD_CHANNELS.includes(message.channel.id)) return;
 
       const IGNORED = ['?', '!', '£', '$'];
@@ -143,22 +144,23 @@ async function main() {
       }
 
     } catch (err) {
-      console.error("MESSAGE ERROR:", err);
+      console.error("Message error:", err);
     }
   });
 
-  // 🔐 LOGIN
   if (!TOKEN) {
-    console.error("❌ DISCORD_TOKEN missing in Railway Variables!");
+    console.error("❌ Missing DISCORD_TOKEN in Railway Variables!");
     process.exit(1);
   }
 
   await client.login(TOKEN);
 
-  // 💓 KEEP ALIVE (IMPORTANT FOR RAILWAY)
-  setInterval(() => {
-    console.log("💓 bot alive");
-  }, 30000);
+  console.log("💓 Bot is running and stable");
 }
 
 main();
+
+// 🧠 KEEP PROCESS ALIVE (IMPORTANT FOR RAILWAY)
+setInterval(() => {
+  // keeps Node alive
+}, 60 * 60 * 1000);
