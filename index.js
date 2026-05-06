@@ -12,6 +12,7 @@ const {
 const fs = require('fs');
 const path = require('path');
 
+// 🔐 ENV TOKEN
 const TOKEN = process.env.DISCORD_TOKEN;
 
 // Channels
@@ -29,10 +30,16 @@ const REWARD_COOLDOWN_MS = 120000;
 const userLastMessage = new Map();
 const userRewardCooldown = new Map();
 
-// 💥 safety nets
-process.on('unhandledRejection', console.error);
-process.on('uncaughtException', console.error);
+// 🚨 GLOBAL ERROR HANDLING (VERY IMPORTANT)
+process.on('unhandledRejection', (err) => {
+  console.error("UNHANDLED REJECTION:", err);
+});
 
+process.on('uncaughtException', (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err);
+});
+
+// Create client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -43,20 +50,27 @@ const client = new Client({
 
 client.commands = new Collection();
 
-async function main() {
-  console.log("🚀 Starting bot...");
+// 🧠 SAFE START FUNCTION
+async function startBot() {
+  console.log("🚀 Booting bot...");
 
-  // load DB safely
+  // ---------- DATABASE ----------
   let db = null;
   try {
     db = require('./database');
-    if (db?.init) await db.init();
-    console.log("🗄️ Database ready");
-  } catch (e) {
-    console.log("⚠️ Database disabled (error ignored)");
+
+    if (db && typeof db.init === "function") {
+      await db.init();
+      console.log("🗄️ Database connected");
+    } else {
+      console.log("⚠️ No DB init found, skipping");
+    }
+  } catch (err) {
+    console.log("⚠️ Database failed, continuing without it");
+    console.error(err);
   }
 
-  // load commands safely
+  // ---------- COMMAND LOADER ----------
   try {
     const commandsPath = path.join(__dirname, 'commands');
 
@@ -66,31 +80,35 @@ async function main() {
       for (const file of files) {
         try {
           const cmd = require(path.join(commandsPath, file));
-          if (cmd.name && cmd.execute) {
+          if (cmd?.name && cmd?.execute) {
             client.commands.set(cmd.name, cmd);
           }
-        } catch (e) {
-          console.log(`❌ Skipped command: ${file}`);
+        } catch (err) {
+          console.log(`❌ Failed command: ${file}`);
+          console.error(err);
         }
       }
     }
 
     console.log(`📦 Commands loaded: ${client.commands.size}`);
-  } catch (e) {
-    console.log("⚠️ Command system disabled");
+  } catch (err) {
+    console.log("⚠️ Command loader failed, continuing bot");
+    console.error(err);
   }
 
+  // ---------- READY EVENT ----------
   client.once(Events.ClientReady, () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
   });
 
+  // ---------- MESSAGE HANDLER ----------
   client.on(Events.MessageCreate, async (message) => {
     try {
       if (message.author.bot || !message.guild) return;
 
       const isAdmin = message.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
-      // commands
+      // COMMANDS
       if (message.content.startsWith(PREFIX)) {
         const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
         const commandName = args.shift()?.toLowerCase();
@@ -105,12 +123,12 @@ async function main() {
         try {
           await command.execute(message, args, client);
         } catch (err) {
-          console.error("Command error:", err);
+          console.error("COMMAND ERROR:", err);
         }
         return;
       }
 
-      // rewards
+      // REWARD SYSTEM
       if (!REWARD_CHANNELS.includes(message.channel.id)) return;
 
       const IGNORED = ['?', '!', '£', '$'];
@@ -144,23 +162,21 @@ async function main() {
       }
 
     } catch (err) {
-      console.error("Message error:", err);
+      console.error("MESSAGE HANDLER ERROR:", err);
     }
   });
 
+  // ---------- LOGIN ----------
   if (!TOKEN) {
-    console.error("❌ Missing DISCORD_TOKEN in Railway Variables!");
-    process.exit(1);
+    throw new Error("DISCORD_TOKEN missing in environment variables");
   }
 
   await client.login(TOKEN);
 
-  console.log("💓 Bot is running and stable");
+  console.log("💓 Bot fully running and stable");
 }
 
-main();
-
-// 🧠 KEEP PROCESS ALIVE (IMPORTANT FOR RAILWAY)
-setInterval(() => {
-  // keeps Node alive
-}, 60 * 60 * 1000);
+// 🚀 START BOT SAFELY
+startBot().catch(err => {
+  console.error("💥 BOT FAILED TO START:", err);
+});
