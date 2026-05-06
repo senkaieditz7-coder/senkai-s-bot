@@ -128,7 +128,11 @@ async function main() {
 
   client.on('error', console.error);
 
-  await client.login(TOKEN);
+  process.on('unhandledRejection', (err) => {
+    console.error('Unhandled rejection:', err);
+  });
+
+  client.login(TOKEN);
 }
 
 main();
