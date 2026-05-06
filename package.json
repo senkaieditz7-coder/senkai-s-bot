@@ -2,11 +2,10 @@
   "name": "@workspace/discord-bot",
   "version": "1.0.0",
   "description": "Economy + Mystery Box Discord Bot",
-  "main": "src/index.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js",
-    "deploy-commands": "node src/deploy-commands.js"
+    "start": "node index.js",
+    "dev": "node --watch index.js"
   },
   "dependencies": {
     "discord.js": "^14.16.3",
