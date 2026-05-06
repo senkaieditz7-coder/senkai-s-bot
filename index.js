@@ -30,9 +30,9 @@ const REWARD_COOLDOWN_MS = 120000;
 const userLastMessage = new Map();
 const userRewardCooldown = new Map();
 
-// 💥 HARD CRASH PROTECTION
-process.on('unhandledRejection', (err) => console.error("UNHANDLED:", err));
-process.on('uncaughtException', (err) => console.error("CRASH:", err));
+// 💥 prevent crashes
+process.on('unhandledRejection', console.error);
+process.on('uncaughtException', console.error);
 
 const client = new Client({
   intents: [
@@ -45,19 +45,19 @@ const client = new Client({
 client.commands = new Collection();
 
 async function main() {
-  console.log("🚀 Bot booting...");
+  console.log("🚀 Bot starting...");
 
-  // ⚠️ SAFE DB IMPORT (NO CRASH IF BROKEN)
+  // SAFE DB LOAD
   let db = null;
   try {
     db = require('./database');
     if (db?.init) await db.init();
     console.log("🗄️ DB loaded");
-  } catch (e) {
-    console.log("⚠️ DB disabled (safe mode)");
+  } catch (err) {
+    console.log("⚠️ DB skipped (safe mode)");
   }
 
-  // ⚠️ SAFE COMMAND LOADER
+  // SAFE COMMAND LOADER
   try {
     const commandsPath = path.join(__dirname, 'commands');
 
@@ -71,14 +71,14 @@ async function main() {
             client.commands.set(cmd.name, cmd);
           }
         } catch (err) {
-          console.log(`❌ Command skipped: ${file}`);
+          console.log("❌ Command skipped:", file);
         }
       }
     }
 
     console.log(`📦 Commands loaded: ${client.commands.size}`);
   } catch (e) {
-    console.log("⚠️ Command system disabled");
+    console.log("⚠️ Commands system disabled");
   }
 
   client.once(Events.ClientReady, () => {
@@ -91,7 +91,6 @@ async function main() {
 
       const isAdmin = message.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
-      // COMMANDS
       if (message.content.startsWith(PREFIX)) {
         const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
         const commandName = args.shift()?.toLowerCase();
@@ -111,7 +110,6 @@ async function main() {
         return;
       }
 
-      // REWARDS
       if (!REWARD_CHANNELS.includes(message.channel.id)) return;
 
       const IGNORED = ['?', '!', '£', '$'];
@@ -149,12 +147,18 @@ async function main() {
     }
   });
 
+  // 🔐 LOGIN
   if (!TOKEN) {
-    console.error("❌ Missing DISCORD_TOKEN in Railway");
+    console.error("❌ DISCORD_TOKEN missing in Railway Variables!");
     process.exit(1);
   }
 
   await client.login(TOKEN);
+
+  // 💓 KEEP ALIVE (IMPORTANT FOR RAILWAY)
+  setInterval(() => {
+    console.log("💓 bot alive");
+  }, 30000);
 }
 
 main();
