@@ -9,7 +9,13 @@ const dbPath = path.join(dbDir, 'economy.db');
 let db;
 
 async function init() {
-  const SQL = await initSqlJs();
+  let SQL;
+  try {
+    SQL = await initSqlJs();
+  } catch (err) {
+    console.error('❌ Failed to load sql.js:', err);
+    throw err;
+  }
   if (fs.existsSync(dbPath)) {
     const fileBuffer = fs.readFileSync(dbPath);
     db = new SQL.Database(fileBuffer);
