@@ -12,13 +12,6 @@ const {
 const fs = require('fs');
 const path = require('path');
 
-let db;
-try {
-  db = require('./database');
-} catch (err) {
-  console.error("❌ database.js failed to load:", err);
-}
-
 // 🔐 TOKEN
 const TOKEN = process.env.DISCORD_TOKEN;
 
@@ -37,9 +30,9 @@ const REWARD_COOLDOWN_MS = 120000;
 const userLastMessage = new Map();
 const userRewardCooldown = new Map();
 
-// 💥 CRASH PROTECTION
-process.on('unhandledRejection', console.error);
-process.on('uncaughtException', console.error);
+// 💥 HARD CRASH PROTECTION
+process.on('unhandledRejection', (err) => console.error("UNHANDLED:", err));
+process.on('uncaughtException', (err) => console.error("CRASH:", err));
 
 const client = new Client({
   intents: [
@@ -52,20 +45,20 @@ const client = new Client({
 client.commands = new Collection();
 
 async function main() {
+  console.log("🚀 Bot booting...");
+
+  // ⚠️ SAFE DB IMPORT (NO CRASH IF BROKEN)
+  let db = null;
   try {
-    console.log("🚀 Bot starting...");
+    db = require('./database');
+    if (db?.init) await db.init();
+    console.log("🗄️ DB loaded");
+  } catch (e) {
+    console.log("⚠️ DB disabled (safe mode)");
+  }
 
-    // SAFE DB INIT
-    if (db && db.init) {
-      try {
-        await db.init();
-        console.log("🗄️ Database loaded");
-      } catch (err) {
-        console.error("❌ Database init failed:", err);
-      }
-    }
-
-    // LOAD COMMANDS SAFELY
+  // ⚠️ SAFE COMMAND LOADER
+  try {
     const commandsPath = path.join(__dirname, 'commands');
 
     if (fs.existsSync(commandsPath)) {
@@ -78,22 +71,27 @@ async function main() {
             client.commands.set(cmd.name, cmd);
           }
         } catch (err) {
-          console.error(`❌ Command failed to load: ${file}`, err);
+          console.log(`❌ Command skipped: ${file}`);
         }
       }
-
-      console.log(`📦 Commands loaded: ${client.commands.size}`);
     }
 
-    client.once(Events.ClientReady, () => {
-      console.log(`✅ Logged in as ${client.user.tag}`);
-    });
+    console.log(`📦 Commands loaded: ${client.commands.size}`);
+  } catch (e) {
+    console.log("⚠️ Command system disabled");
+  }
 
-    client.on(Events.MessageCreate, async (message) => {
+  client.once(Events.ClientReady, () => {
+    console.log(`✅ Logged in as ${client.user.tag}`);
+  });
+
+  client.on(Events.MessageCreate, async (message) => {
+    try {
       if (message.author.bot || !message.guild) return;
 
       const isAdmin = message.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
+      // COMMANDS
       if (message.content.startsWith(PREFIX)) {
         const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
         const commandName = args.shift()?.toLowerCase();
@@ -108,11 +106,12 @@ async function main() {
         try {
           await command.execute(message, args, client);
         } catch (err) {
-          console.error("❌ Command error:", err);
+          console.error("CMD ERROR:", err);
         }
         return;
       }
 
+      // REWARDS
       if (!REWARD_CHANNELS.includes(message.channel.id)) return;
 
       const IGNORED = ['?', '!', '£', '$'];
@@ -128,10 +127,10 @@ async function main() {
       const lastReward = userRewardCooldown.get(userId) || 0;
       if (now - lastReward < REWARD_COOLDOWN_MS) return;
 
-      if (db && db.incrementMessage) {
+      if (db?.incrementMessage && db?.addCoins) {
         const count = db.incrementMessage(userId);
 
-        if (count >= MESSAGES_NEEDED && db.addCoins) {
+        if (count >= MESSAGES_NEEDED) {
           db.addCoins(userId, MESSAGE_REWARD_AMOUNT);
           userRewardCooldown.set(userId, now);
 
@@ -144,20 +143,18 @@ async function main() {
           });
         }
       }
-    });
 
-    // TOKEN CHECK
-    if (!TOKEN) {
-      console.error("❌ DISCORD_TOKEN missing in Railway Variables!");
-      process.exit(1);
+    } catch (err) {
+      console.error("MESSAGE ERROR:", err);
     }
+  });
 
-    await client.login(TOKEN);
-
-  } catch (err) {
-    console.error("❌ FATAL ERROR:", err);
+  if (!TOKEN) {
+    console.error("❌ Missing DISCORD_TOKEN in Railway");
     process.exit(1);
   }
+
+  await client.login(TOKEN);
 }
 
 main();
