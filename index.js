@@ -1,3 +1,5 @@
+require('dotenv').config(); // optional for local use
+
 const {
   Client,
   GatewayIntentBits,
@@ -11,7 +13,9 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./database');
 
-const TOKEN = process.env.TOKEN;
+// 🔐 TOKEN (Railway variable)
+const TOKEN = process.env.DISCORD_TOKEN;
+
 const OWNER_ID = '1461290677647179816';
 
 // Channels
@@ -29,6 +33,10 @@ const REWARD_COOLDOWN_MS = 120000;
 const userLastMessage = new Map();
 const userRewardCooldown = new Map();
 
+// 🚨 CRASH PROTECTION (IMPORTANT)
+process.on('unhandledRejection', console.error);
+process.on('uncaughtException', console.error);
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -40,95 +48,108 @@ const client = new Client({
 client.commands = new Collection();
 
 async function main() {
-  await db.init();
+  try {
+    console.log("🚀 Bot starting...");
 
-  // Load commands (make sure your commands are in /commands folder)
-  const commandsPath = path.join(__dirname, 'commands');
-  if (fs.existsSync(commandsPath)) {
-    const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
-    for (const file of files) {
-      const cmd = require(path.join(commandsPath, file));
-      if (cmd.name && cmd.execute) {
-        client.commands.set(cmd.name, cmd);
-      }
+    // DB init safety
+    if (db && db.init) {
+      await db.init();
+      console.log("🗄️ Database ready");
     }
+
+    // Load commands
+    const commandsPath = path.join(__dirname, 'commands');
+    if (fs.existsSync(commandsPath)) {
+      const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
+      for (const file of files) {
+        const cmd = require(path.join(commandsPath, file));
+        if (cmd.name && cmd.execute) {
+          client.commands.set(cmd.name, cmd);
+        }
+      }
+      console.log(`📦 Loaded ${client.commands.size} commands`);
+    }
+
+    client.once(Events.ClientReady, () => {
+      console.log(`✅ Logged in as ${client.user.tag}`);
+    });
+
+    client.on(Events.MessageCreate, async (message) => {
+      if (message.author.bot || !message.guild) return;
+
+      const isAdmin = message.member.permissions.has(PermissionsBitField.Flags.Administrator);
+
+      if (message.author.id === OWNER_ID && message.content === 'Hi kids') {
+        return message.reply('Hi Master! Was it a hardworking day! Keep up the good work :)');
+      }
+
+      if (message.content.startsWith(PREFIX)) {
+        const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
+        const commandName = args.shift()?.toLowerCase();
+
+        const command = client.commands.get(commandName);
+        if (!command) return;
+
+        if (!COMMAND_CHANNELS.includes(message.channel.id) && !isAdmin) {
+          return message.reply(`❌ Please use bot commands in <#${COMMAND_CHANNELS[0]}>`);
+        }
+
+        try {
+          await command.execute(message, args, client);
+        } catch (err) {
+          console.error("Command error:", err);
+          message.reply('❌ Error running command.');
+        }
+        return;
+      }
+
+      if (!REWARD_CHANNELS.includes(message.channel.id)) return;
+
+      const IGNORED_PREFIXES = ['?', '!', '£', '$'];
+      if (IGNORED_PREFIXES.some(p => message.content.startsWith(p))) return;
+
+      if (message.content.length < 3) return;
+
+      const userId = message.author.id;
+      const now = Date.now();
+
+      const last = userLastMessage.get(userId) || 0;
+      if (now - last < SPAM_COOLDOWN_MS) return;
+      userLastMessage.set(userId, now);
+
+      const lastReward = userRewardCooldown.get(userId) || 0;
+      if (now - lastReward < REWARD_COOLDOWN_MS) return;
+
+      const count = db.incrementMessage(userId);
+
+      if (count >= MESSAGES_NEEDED) {
+        db.addCoins(userId, MESSAGE_REWARD_AMOUNT);
+        userRewardCooldown.set(userId, now);
+
+        await message.channel.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x2ecc71)
+              .setDescription(`💬 ${message.author} earned **${MESSAGE_REWARD_AMOUNT} coins**!`)
+          ]
+        });
+      }
+    });
+
+    client.on('error', console.error);
+
+    // 🔐 TOKEN CHECK
+    if (!TOKEN) {
+      console.error("❌ DISCORD_TOKEN is missing in Railway Variables!");
+      process.exit(1);
+    }
+
+    await client.login(TOKEN);
+
+  } catch (err) {
+    console.error("❌ FATAL ERROR:", err);
+    process.exit(1);
   }
-
-  client.once(Events.ClientReady, () => {
-    console.log(`✅ Logged in as ${client.user.tag}`);
-  });
-
-  client.on(Events.MessageCreate, async (message) => {
-    if (message.author.bot || !message.guild) return;
-
-    const isAdmin = message.member.permissions.has(PermissionsBitField.Flags.Administrator);
-
-    // 👑 Owner custom reply
-    if (message.author.id === OWNER_ID && message.content === 'Hi kids') {
-      return message.reply('Hi Master! Was it a hardworking day! Keep up the good work :)');
-    }
-
-    // ⚙️ Prefix commands
-    if (message.content.startsWith(PREFIX)) {
-      const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
-      const commandName = args.shift()?.toLowerCase();
-
-      const command = client.commands.get(commandName);
-      if (!command) return;
-
-      // Restrict channels
-      if (!COMMAND_CHANNELS.includes(message.channel.id) && !isAdmin) {
-        return message.reply(`❌ Please use bot commands in <#${COMMAND_CHANNELS[0]}>`);
-      }
-
-      try {
-        await command.execute(message, args, client);
-      } catch (err) {
-        console.error(err);
-        message.reply('❌ Error running command.');
-      }
-      return;
-    }
-
-    // 💬 Chat reward system
-    if (!REWARD_CHANNELS.includes(message.channel.id)) return;
-
-    const IGNORED_PREFIXES = ['?', '!', '£', '$'];
-    if (IGNORED_PREFIXES.some(p => message.content.startsWith(p))) return;
-
-    if (message.content.length < 3) return;
-
-    const userId = message.author.id;
-    const now = Date.now();
-
-    // Anti-spam
-    const last = userLastMessage.get(userId) || 0;
-    if (now - last < SPAM_COOLDOWN_MS) return;
-    userLastMessage.set(userId, now);
-
-    // Reward cooldown
-    const lastReward = userRewardCooldown.get(userId) || 0;
-    if (now - lastReward < REWARD_COOLDOWN_MS) return;
-
-    const count = db.incrementMessage(userId);
-
-    if (count >= MESSAGES_NEEDED) {
-      db.addCoins(userId, MESSAGE_REWARD_AMOUNT);
-      userRewardCooldown.set(userId, now);
-
-      await message.channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0x2ecc71)
-            .setDescription(`💬 ${message.author} earned **${MESSAGE_REWARD_AMOUNT} coins**!`)
-        ]
-      });
-    }
-  });
-
-  client.on('error', console.error);
-
-  await client.login(TOKEN);
 }
 
 main();
