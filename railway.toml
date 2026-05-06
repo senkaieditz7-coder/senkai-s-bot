@@ -1,7 +1,10 @@
 [build]
 builder = "nixpacks"
 
+[build.env]
+NPM_CONFIG_PRODUCTION = "false"
+
 [deploy]
-startCommand = "node src/index.js"
+startCommand = "node index.js"
 restartPolicyType = "ALWAYS"
 restartPolicyMaxRetries = 10
