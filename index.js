@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./database');
 
-// TOKEN (use env first, fallback optional)
+// TOKEN
 const TOKEN = process.env.TOKEN || process.env.BOT_TOKEN;
 
 if (!TOKEN) {
@@ -23,6 +23,7 @@ if (!TOKEN) {
 const PREFIX = '£';
 const OWNER_ID = '1461290677647179816';
 
+// CHANNELS
 const COMMAND_CHANNELS = [
   '1492918524878786563',
   '1492918525105275033'
@@ -32,11 +33,6 @@ const REWARD_CHANNELS = [
   '1492918524367343853',
   '1492918525105275032'
 ];
-
-const MESSAGE_REWARD_AMOUNT = 15;
-const MESSAGES_NEEDED = 20;
-const SPAM_COOLDOWN_MS = 2000;
-const REWARD_COOLDOWN_MS = 120000;
 
 // MEMORY
 const userLastMessage = new Map();
@@ -53,37 +49,58 @@ const client = new Client({
 
 client.commands = new Collection();
 
-async function main() {
-  await db.init();
+// 🔥 AUTO FIND COMMAND FOLDER (FIX FOR NEXUS PATH ISSUES)
+function findCommandsPath() {
+  const possiblePaths = [
+    path.join(__dirname, 'commands'),
+    path.join(__dirname, 'src', 'commands'),
+    path.join(__dirname, 'discord-bot', 'src', 'commands'),
+  ];
 
-  // ✅ COMMAND LOADER (FIXED)
-  const commandsPath = path.join(__dirname, 'commands');
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return p;
+  }
 
-  if (!fs.existsSync(commandsPath)) {
-    console.error("❌ Commands folder not found:", commandsPath);
-  } else {
-    const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
+  return null;
+}
 
-    for (const file of files) {
-      try {
-        const cmd = require(path.join(commandsPath, file));
+async function loadCommands() {
+  const commandsPath = findCommandsPath();
 
-        if (!cmd.name || !cmd.execute) {
-          console.log(`⚠️ Invalid command file skipped: ${file}`);
-          continue;
-        }
+  if (!commandsPath) {
+    console.error("❌ Commands folder not found in any known location!");
+    return;
+  }
 
-        client.commands.set(cmd.name, cmd);
-        console.log(`✅ Loaded command: ${cmd.name}`);
-      } catch (err) {
-        console.error(`❌ Error loading ${file}:`, err);
+  console.log("📁 Using commands folder:", commandsPath);
+
+  const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
+
+  for (const file of files) {
+    try {
+      const cmd = require(path.join(commandsPath, file));
+
+      if (!cmd.name || !cmd.execute) {
+        console.log(`⚠️ Skipped invalid command: ${file}`);
+        continue;
       }
+
+      client.commands.set(cmd.name, cmd);
+      console.log(`✅ Loaded command: ${cmd.name}`);
+    } catch (err) {
+      console.error(`❌ Error loading ${file}:`, err);
     }
   }
 
   console.log("📦 FINAL COMMANDS:", [...client.commands.keys()]);
+}
 
-  // READY EVENT
+async function main() {
+  await db.init();
+
+  await loadCommands();
+
+  // READY
   client.once(Events.ClientReady, () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
   });
@@ -98,7 +115,7 @@ async function main() {
 
     // OWNER TEST
     if (message.author.id === OWNER_ID && message.content === 'Hi kids') {
-      return message.reply('Hi Master! Was it a hardworking day! Keep up the good work :)');
+      return message.reply('Hi Master! Keep going 💪');
     }
 
     // PREFIX COMMANDS
@@ -131,38 +148,35 @@ async function main() {
     // REWARD SYSTEM
     if (!REWARD_CHANNELS.includes(message.channel.id)) return;
 
-    const IGNORED_PREFIXES = ['?', '!', '£', '$'];
-    if (IGNORED_PREFIXES.some(p => message.content.startsWith(p))) return;
-
+    const IGNORED = ['?', '!', '£', '$'];
+    if (IGNORED.some(p => message.content.startsWith(p))) return;
     if (message.content.length < 3) return;
 
     const userId = message.author.id;
     const now = Date.now();
 
     const last = userLastMessage.get(userId) || 0;
-    if (now - last < SPAM_COOLDOWN_MS) return;
+    if (now - last < 2000) return;
     userLastMessage.set(userId, now);
 
     const lastReward = userRewardCooldown.get(userId) || 0;
-    if (now - lastReward < REWARD_COOLDOWN_MS) return;
+    if (now - lastReward < 120000) return;
 
     const count = db.incrementMessage(userId);
 
-    if (count >= MESSAGES_NEEDED) {
-      db.addCoins(userId, MESSAGE_REWARD_AMOUNT);
+    if (count >= 20) {
+      db.addCoins(userId, 15);
       userRewardCooldown.set(userId, now);
 
-      await message.channel.send({
+      message.channel.send({
         embeds: [
           new EmbedBuilder()
             .setColor(0x2ecc71)
-            .setDescription(`💬 ${message.author} earned **${MESSAGE_REWARD_AMOUNT} coins**!`),
-        ],
+            .setDescription(`💬 ${message.author} earned **15 coins**!`)
+        ]
       });
     }
   });
-
-  client.on('error', console.error);
 
   client.login(TOKEN);
 }
