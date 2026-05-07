@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const db = require('./database');
+const { OWNER_ID } = require('./variables');
 
 const client = new Client({
   intents: [
@@ -15,7 +16,8 @@ client.commands = new Collection();
 
 const PREFIX = '£';
 
-// COMMAND LOADER (FIXED)
+
+// ---------------- COMMAND LOADER ----------------
 function loadCommands() {
   const files = fs.readdirSync(__dirname).filter(file => {
     return (
@@ -28,8 +30,6 @@ function loadCommands() {
     );
   });
 
-  let loaded = 0;
-
   for (const file of files) {
     try {
       const command = require(path.join(__dirname, file));
@@ -41,17 +41,16 @@ function loadCommands() {
 
       client.commands.set(command.name, command);
       console.log(`✅ Loaded command: ${command.name}`);
-      loaded++;
     } catch (err) {
       console.log(`❌ Error loading ${file}: ${err.message}`);
     }
   }
 
   console.log(`📦 FINAL COMMANDS: [${[...client.commands.keys()].join(', ')}]`);
-  if (loaded === 0) console.log('❌ No commands loaded!');
 }
 
-// MESSAGE HANDLER
+
+// ---------------- MESSAGE HANDLER ----------------
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
@@ -61,9 +60,7 @@ client.on('messageCreate', async (message) => {
 
   const command = client.commands.get(cmdName);
 
-  if (!command) {
-    return message.reply('❌ Unknown command.');
-  }
+  if (!command) return message.reply('❌ Unknown command.');
 
   try {
     await command.execute(message, args, client);
@@ -73,10 +70,12 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// BUTTON HANDLER (resetcoins)
+
+// ---------------- BUTTON HANDLER ----------------
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
 
+  // CANCEL RESET
   if (interaction.customId === 'resetcoins_cancel') {
     return interaction.update({
       content: '❌ Reset cancelled.',
@@ -84,7 +83,15 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
+  // CONFIRM RESET
   if (interaction.customId === 'resetcoins_confirm') {
+    if (interaction.user.id !== OWNER_ID) {
+      return interaction.reply({
+        content: '❌ Only owner can use this.',
+        ephemeral: true,
+      });
+    }
+
     db.resetAllCoins();
 
     return interaction.update({
@@ -94,8 +101,9 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// READY EVENT
-client.once('ready', async () => {
+
+// ---------------- READY EVENT ----------------
+client.once('clientReady', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
   try {
@@ -108,5 +116,6 @@ client.once('ready', async () => {
   loadCommands();
 });
 
-// LOGIN
+
+// ---------------- LOGIN ----------------
 client.login(process.env.TOKEN);
