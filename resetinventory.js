@@ -9,11 +9,13 @@ module.exports = {
     const target = message.mentions.users.first();
 
     if (!target) {
-      return message.reply('❌ Please mention a user. Usage: `£resetinventory @user`');
+      return message.reply('❌ Usage: £resetinventory @user');
     }
 
     db.resetInventory(target.id);
 
-    await message.reply(`✅ Inventory cleared for ${target.tag}.`);
+    return message.reply(
+      `🗑️ Inventory cleared for **${target.tag}**`
+    );
   },
 };
