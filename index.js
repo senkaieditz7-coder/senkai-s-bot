@@ -15,18 +15,20 @@ client.commands = new Collection();
 
 const PREFIX = '£';
 
-// ONLY ONE CORRECT PATH (your actual setup)
+// ONLY LOAD REAL COMMAND FILES
 const COMMAND_DIR = __dirname;
 
 function loadCommands() {
   const files = fs.readdirSync(COMMAND_DIR)
     .filter(f => f.endsWith('.js'))
-    .filter(f => f !== 'index.js' && f !== 'database.js' && f !== 'boxes.js');
+    .filter(f => !['index.js', 'database.js', 'boxes.js'].includes(f));
 
-  let loaded = 0;
+  client.commands.clear();
 
   for (const file of files) {
     try {
+      delete require.cache[require.resolve(path.join(COMMAND_DIR, file))];
+
       const command = require(path.join(COMMAND_DIR, file));
 
       if (!command?.name || !command?.execute) {
@@ -36,14 +38,12 @@ function loadCommands() {
 
       client.commands.set(command.name, command);
       console.log(`✅ Loaded command: ${command.name}`);
-      loaded++;
     } catch (err) {
       console.log(`❌ Error loading ${file}: ${err.message}`);
     }
   }
 
   console.log(`📦 FINAL COMMANDS: [${[...client.commands.keys()].join(', ')}]`);
-  if (loaded === 0) console.log('❌ No commands loaded!');
 }
 
 client.on('messageCreate', async (message) => {
@@ -67,15 +67,13 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-client.once('ready', async () => {
+// FIXED READY EVENT
+client.once('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
-  try {
-    await db.init();
-    console.log('📦 Database ready');
-  } catch (e) {
-    console.log('❌ DB error:', e.message);
-  }
+  db.init()
+    .then(() => console.log('📦 Database ready'))
+    .catch(err => console.log('❌ DB error:', err.message));
 
   loadCommands();
 });
