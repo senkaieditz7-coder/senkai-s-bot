@@ -11,11 +11,11 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./database');
 
-// TOKEN
+// TOKEN (use env first, fallback optional)
 const TOKEN = process.env.TOKEN || process.env.BOT_TOKEN;
 
 if (!TOKEN) {
-  console.error("❌ No bot token found!");
+  console.error("❌ No bot token found in environment variables!");
   process.exit(1);
 }
 
@@ -56,8 +56,8 @@ client.commands = new Collection();
 async function main() {
   await db.init();
 
-  // ✅ FIXED COMMAND PATH
-  const commandsPath = path.join(__dirname, 'src', 'commands');
+  // ✅ COMMAND LOADER (FIXED)
+  const commandsPath = path.join(__dirname, 'commands');
 
   if (!fs.existsSync(commandsPath)) {
     console.error("❌ Commands folder not found:", commandsPath);
@@ -68,21 +68,22 @@ async function main() {
       try {
         const cmd = require(path.join(commandsPath, file));
 
-        console.log("LOADING:", file, "=>", cmd.name);
-
-        if (cmd.name && cmd.execute) {
-          client.commands.set(cmd.name, cmd);
+        if (!cmd.name || !cmd.execute) {
+          console.log(`⚠️ Invalid command file skipped: ${file}`);
+          continue;
         }
+
+        client.commands.set(cmd.name, cmd);
+        console.log(`✅ Loaded command: ${cmd.name}`);
       } catch (err) {
-        console.error("❌ Error loading:", file, err);
+        console.error(`❌ Error loading ${file}:`, err);
       }
     }
   }
 
-  // DEBUG
-  console.log("COMMANDS LOADED:", [...client.commands.keys()]);
+  console.log("📦 FINAL COMMANDS:", [...client.commands.keys()]);
 
-  // READY
+  // READY EVENT
   client.once(Events.ClientReady, () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
   });
