@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
-
 const db = require('./database');
 
 const client = new Client({
@@ -15,17 +14,25 @@ const client = new Client({
 client.commands = new Collection();
 
 const PREFIX = '£';
-const COMMAND_DIR = __dirname;
 
-// LOAD COMMANDS
+// COMMAND LOADER (FIXED)
 function loadCommands() {
-  const files = fs.readdirSync(COMMAND_DIR)
-    .filter(f => f.endsWith('.js'))
-    .filter(f => !['index.js', 'database.js', 'boxes.js'].includes(f));
+  const files = fs.readdirSync(__dirname).filter(file => {
+    return (
+      file.endsWith('.js') &&
+      ![
+        'index.js',
+        'database.js',
+        'variables.js'
+      ].includes(file)
+    );
+  });
+
+  let loaded = 0;
 
   for (const file of files) {
     try {
-      const command = require(path.join(COMMAND_DIR, file));
+      const command = require(path.join(__dirname, file));
 
       if (!command?.name || !command?.execute) {
         console.log(`⚠️ Skipped invalid command: ${file}`);
@@ -34,12 +41,14 @@ function loadCommands() {
 
       client.commands.set(command.name, command);
       console.log(`✅ Loaded command: ${command.name}`);
+      loaded++;
     } catch (err) {
       console.log(`❌ Error loading ${file}: ${err.message}`);
     }
   }
 
   console.log(`📦 FINAL COMMANDS: [${[...client.commands.keys()].join(', ')}]`);
+  if (loaded === 0) console.log('❌ No commands loaded!');
 }
 
 // MESSAGE HANDLER
@@ -51,7 +60,10 @@ client.on('messageCreate', async (message) => {
   const cmdName = args.shift().toLowerCase();
 
   const command = client.commands.get(cmdName);
-  if (!command) return message.reply('❌ Unknown command.');
+
+  if (!command) {
+    return message.reply('❌ Unknown command.');
+  }
 
   try {
     await command.execute(message, args, client);
@@ -61,11 +73,9 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// BUTTON HANDLER (RESET COINS SYSTEM)
+// BUTTON HANDLER (resetcoins)
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
-
-  const db = require('./database');
 
   if (interaction.customId === 'resetcoins_cancel') {
     return interaction.update({
@@ -98,4 +108,5 @@ client.once('ready', async () => {
   loadCommands();
 });
 
+// LOGIN
 client.login(process.env.TOKEN);
