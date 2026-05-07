@@ -11,11 +11,11 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./database');
 
-// 🔥 TOKEN (fallback safe)
+// TOKEN
 const TOKEN = process.env.TOKEN || process.env.BOT_TOKEN;
 
 if (!TOKEN) {
-  console.error("❌ No bot token found in environment variables!");
+  console.error("❌ No bot token found!");
   process.exit(1);
 }
 
@@ -56,7 +56,7 @@ client.commands = new Collection();
 async function main() {
   await db.init();
 
-  // ✅ FIXED PATH (your real structure)
+  // ✅ FIXED COMMAND PATH
   const commandsPath = path.join(__dirname, 'src', 'commands');
 
   if (!fs.existsSync(commandsPath)) {
@@ -68,17 +68,19 @@ async function main() {
       try {
         const cmd = require(path.join(commandsPath, file));
 
+        console.log("LOADING:", file, "=>", cmd.name);
+
         if (cmd.name && cmd.execute) {
           client.commands.set(cmd.name, cmd);
-          console.log(`✅ Loaded command: ${cmd.name}`);
-        } else {
-          console.log(`⚠️ Invalid command file: ${file}`);
         }
       } catch (err) {
-        console.error(`❌ Failed loading ${file}:`, err);
+        console.error("❌ Error loading:", file, err);
       }
     }
   }
+
+  // DEBUG
+  console.log("COMMANDS LOADED:", [...client.commands.keys()]);
 
   // READY
   client.once(Events.ClientReady, () => {
@@ -103,9 +105,13 @@ async function main() {
       const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
       const commandName = args.shift()?.toLowerCase();
 
+      console.log("INPUT COMMAND:", commandName);
+
       const command = client.commands.get(commandName);
 
-      if (!command) return message.reply("❌ Unknown command.");
+      if (!command) {
+        return message.reply("❌ Unknown command");
+      }
 
       if (!COMMAND_CHANNELS.includes(message.channel.id) && !isAdmin) {
         return message.reply(`❌ Use commands in <#${COMMAND_CHANNELS[0]}>`);
@@ -115,7 +121,7 @@ async function main() {
         await command.execute(message, args, client);
       } catch (err) {
         console.error(err);
-        message.reply('❌ Command error.');
+        message.reply("❌ Error running command");
       }
 
       return;
