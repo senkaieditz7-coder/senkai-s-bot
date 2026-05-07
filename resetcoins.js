@@ -4,7 +4,6 @@ const {
   ButtonStyle,
 } = require('discord.js');
 
-const db = require('./database');
 const { OWNER_ID } = require('./variables');
 
 module.exports = {
@@ -30,7 +29,7 @@ module.exports = {
     );
 
     return message.reply({
-      content: '⚠️ This will set ALL users coins to **0**. Are you sure?',
+      content: '⚠️ Are you sure you want to reset ALL coins?',
       components: [row],
     });
   },
