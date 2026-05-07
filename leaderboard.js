@@ -1,4 +1,4 @@
-const db = require('../database');
+const db = require('./database');
 const { EmbedBuilder } = require('discord.js');
 
 const MEDALS = ['🥇', '🥈', '🥉'];
