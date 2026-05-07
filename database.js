@@ -1,12 +1,12 @@
-      const initSqlJs = require('sql.js');
+const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
 
-// 🔥 SAFE PATH SETUP (FIXS ENOTDIR FOREVER)
+// 📁 Safe database path setup
 const dbDir = path.join(__dirname, 'data');
 const dbPath = path.join(dbDir, 'economy.db');
 
-// If something named "data" exists but is NOT a folder → delete it
+// 🔥 Fix: if "data" exists but is NOT a folder → remove it
 try {
   if (fs.existsSync(dbDir) && !fs.lstatSync(dbDir).isDirectory()) {
     fs.unlinkSync(dbDir);
@@ -24,7 +24,7 @@ let SQL;
 let db;
 let isReady = false;
 
-// INIT DATABASE
+// INIT DB
 async function init() {
   SQL = await initSqlJs();
 
@@ -40,13 +40,10 @@ async function init() {
       user_id TEXT PRIMARY KEY,
       coins INTEGER DEFAULT 0,
       last_daily INTEGER DEFAULT 0,
-      last_message_reward INTEGER DEFAULT 0,
-      message_count INTEGER DEFAULT 0,
       last_luck INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS inventory (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id TEXT,
       item_name TEXT,
       quantity INTEGER DEFAULT 1,
@@ -72,10 +69,8 @@ function save() {
   fs.writeFileSync(dbPath, Buffer.from(data));
 }
 
-// SAFE QUERY
+// QUERY
 function query(sql, params = []) {
-  if (!db) return [];
-
   const stmt = db.prepare(sql);
   stmt.bind(params);
 
@@ -86,23 +81,14 @@ function query(sql, params = []) {
   return rows;
 }
 
-// SAFE RUN
+// RUN
 function run(sql, params = []) {
-  if (!db) return;
-
   db.run(sql, params);
   save();
 }
 
-// READY CHECK
-function ensureReady() {
-  if (!isReady) throw new Error('Database not initialized. Call init() first.');
-}
-
-// USER
+// USER GET
 function getUser(userId) {
-  ensureReady();
-
   let rows = query('SELECT * FROM users WHERE user_id = ?', [userId]);
 
   if (rows.length === 0) {
@@ -119,7 +105,6 @@ function getBalance(userId) {
 }
 
 function addCoins(userId, amount) {
-  getUser(userId);
   run('UPDATE users SET coins = coins + ? WHERE user_id = ?', [amount, userId]);
 }
 
@@ -132,7 +117,6 @@ function removeCoins(userId, amount) {
 }
 
 function setCoins(userId, amount) {
-  getUser(userId);
   run('UPDATE users SET coins = ? WHERE user_id = ?', [amount, userId]);
 }
 
@@ -145,10 +129,17 @@ function setLastDaily(userId, time) {
   run('UPDATE users SET last_daily = ? WHERE user_id = ?', [time, userId]);
 }
 
+// LUCK
+function getLastLuck(userId) {
+  return getUser(userId).last_luck || 0;
+}
+
+function setLastLuck(userId, time) {
+  run('UPDATE users SET last_luck = ? WHERE user_id = ?', [time, userId]);
+}
+
 // INVENTORY
 function addItem(userId, item, qty = 1) {
-  getUser(userId);
-
   run(`
     INSERT INTO inventory (user_id, item_name, quantity)
     VALUES (?, ?, ?)
@@ -158,10 +149,7 @@ function addItem(userId, item, qty = 1) {
 }
 
 function getInventory(userId) {
-  return query(
-    'SELECT item_name, quantity FROM inventory WHERE user_id = ?',
-    [userId]
-  );
+  return query('SELECT item_name, quantity FROM inventory WHERE user_id = ?', [userId]);
 }
 
 // LEADERBOARD
@@ -170,15 +158,6 @@ function getLeaderboard(limit = 10) {
     'SELECT user_id, coins FROM users ORDER BY coins DESC LIMIT ?',
     [limit]
   );
-}
-
-// LUCK
-function getLastLuck(userId) {
-  return getUser(userId).last_luck || 0;
-}
-
-function setLastLuck(userId, time) {
-  run('UPDATE users SET last_luck = ? WHERE user_id = ?', [time, userId]);
 }
 
 // EXPORT
@@ -193,13 +172,13 @@ module.exports = {
   getLastDaily,
   setLastDaily,
 
+  getLastLuck,
+  setLastLuck,
+
   addItem,
   getInventory,
 
   getLeaderboard,
-
-  getLastLuck,
-  setLastLuck,
 
   resetAllCoins: () => run('UPDATE users SET coins = 0'),
   resetInventory: (userId) => run('DELETE FROM inventory WHERE user_id = ?', [userId]),
