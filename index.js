@@ -1,7 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
+
 const db = require('./database');
+const { OWNER_ID } = require('./variables'); // your ID file
 
 const client = new Client({
   intents: [
@@ -15,20 +17,19 @@ client.commands = new Collection();
 
 const PREFIX = '£';
 
-// ONLY LOAD REAL COMMAND FILES
+// folder where commands are stored (same folder as index.js)
 const COMMAND_DIR = __dirname;
 
+// LOAD COMMANDS
 function loadCommands() {
   const files = fs.readdirSync(COMMAND_DIR)
-    .filter(f => f.endsWith('.js'))
-    .filter(f => !['index.js', 'database.js', 'boxes.js'].includes(f));
+    .filter(file => file.endsWith('.js'))
+    .filter(file => !['index.js', 'database.js', 'boxes.js', 'variables.js'].includes(file));
 
-  client.commands.clear();
+  let loaded = 0;
 
   for (const file of files) {
     try {
-      delete require.cache[require.resolve(path.join(COMMAND_DIR, file))];
-
       const command = require(path.join(COMMAND_DIR, file));
 
       if (!command?.name || !command?.execute) {
@@ -38,14 +39,17 @@ function loadCommands() {
 
       client.commands.set(command.name, command);
       console.log(`✅ Loaded command: ${command.name}`);
+      loaded++;
     } catch (err) {
       console.log(`❌ Error loading ${file}: ${err.message}`);
     }
   }
 
   console.log(`📦 FINAL COMMANDS: [${[...client.commands.keys()].join(', ')}]`);
+  if (loaded === 0) console.log('❌ No commands loaded!');
 }
 
+// MESSAGE HANDLER
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
@@ -54,9 +58,16 @@ client.on('messageCreate', async (message) => {
   const cmdName = args.shift().toLowerCase();
 
   const command = client.commands.get(cmdName);
+  if (!command) return message.reply('❌ Unknown command.');
 
-  if (!command) {
-    return message.reply('❌ Unknown command.');
+  // OWNER CHECK
+  if (command.ownerOnly && message.author.id !== OWNER_ID) {
+    return message.reply('❌ This command is owner-only.');
+  }
+
+  // ADMIN CHECK (optional: only works if you use Discord permissions)
+  if (command.adminOnly && !message.member.permissions.has('Administrator')) {
+    return message.reply('❌ Admin only command.');
   }
 
   try {
@@ -67,13 +78,16 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// FIXED READY EVENT
-client.once('ready', () => {
+// READY EVENT
+client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
-  db.init()
-    .then(() => console.log('📦 Database ready'))
-    .catch(err => console.log('❌ DB error:', err.message));
+  try {
+    await db.init();
+    console.log('📦 Database ready');
+  } catch (e) {
+    console.log('❌ DB error:', e.message);
+  }
 
   loadCommands();
 });
