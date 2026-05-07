@@ -1,63 +1,92 @@
+const db = require('./database');
+
 const BOXES = {
   rare: {
     name: 'Rare Box',
     emoji: '🟦',
     cost: 1500,
-    color: 0x3498db,
     rewards: [
-      { type: 'item', name: 'Shadow Fruit',   emojiName: 'Shadow_Fruit',   fallback: '🌑', chance: 30 },
-      { type: 'item', name: 'Blizzard Fruit', emojiName: 'Blizzard_Fruit', fallback: '🌨️', chance: 30 },
-      { type: 'item', name: 'Buddha Fruit',   emojiName: 'Buddha_Fruit',   fallback: '🧘', chance: 25 },
-      { type: 'item', name: 'Portal Fruit',   emojiName: 'Portal_Fruit',   fallback: '🌀', chance: 15 },
+      { type: 'item', name: 'Shadow Fruit', chance: 30 },
+      { type: 'item', name: 'Blizzard Fruit', chance: 30 },
+      { type: 'item', name: 'Buddha Fruit', chance: 25 },
+      { type: 'item', name: 'Portal Fruit', chance: 15 },
     ],
   },
   premium: {
     name: 'Premium Box',
     emoji: '🟪',
     cost: 2500,
-    color: 0x9b59b6,
     rewards: [
-      { type: 'item', name: 'T-Rex Fruit',           emojiName: 'TRex_Fruit',                  fallback: '🦖', chance: 40 },
-      { type: 'item', name: 'Pain Fruit',            emojiName: 'Pain',                        fallback: '💢', chance: 35 },
-      { type: 'item', name: 'Buddha & Portal Fruit', emojiName: ['Buddha_Fruit', 'Portal_Fruit'], fallback: '🧘🌀', chance: 18 },
-      { type: 'item', name: 'Dough Fruit',           emojiName: 'Dough_Fruit',                 fallback: '🍩', chance: 7  },
+      { type: 'item', name: 'T-Rex Fruit', chance: 40 },
+      { type: 'item', name: 'Pain Fruit', chance: 35 },
+      { type: 'item', name: 'Buddha & Portal Fruit', chance: 18 },
+      { type: 'item', name: 'Dough Fruit', chance: 7 },
     ],
   },
   luxury: {
     name: 'Luxury Box',
     emoji: '🟨',
     cost: 3600,
-    color: 0xf1c40f,
     rewards: [
-      { type: 'item', name: 'Lightning Fruit', emojiName: 'Lightning_Fruit', fallback: '⚡',  chance: 40 },
-      { type: 'item', name: 'Gas Fruit',       emojiName: 'Gas_Fruit',       fallback: '🌫️', chance: 35 },
-      { type: 'item', name: 'Tiger Fruit',     emojiName: 'Tiger_Fruit',     fallback: '🐅',  chance: 15 },
-      { type: 'item', name: 'Yeti Fruit',      emojiName: 'Yeti_Fruit',      fallback: '🏔️', chance: 10 },
+      { type: 'item', name: 'Lightning Fruit', chance: 40 },
+      { type: 'item', name: 'Gas Fruit', chance: 35 },
+      { type: 'item', name: 'Tiger Fruit', chance: 15 },
+      { type: 'item', name: 'Yeti Fruit', chance: 10 },
     ],
   },
 };
 
-function rollReward(boxKey) {
-  const box = BOXES[boxKey];
+// roll reward
+function rollReward(box) {
   const roll = Math.random() * 100;
-  let cumulative = 0;
-  for (const reward of box.rewards) {
-    cumulative += reward.chance;
-    if (roll < cumulative) return reward;
+  let sum = 0;
+
+  for (const r of box.rewards) {
+    sum += r.chance;
+    if (roll <= sum) return r;
   }
+
   return box.rewards[box.rewards.length - 1];
 }
 
-function getRewardEmoji(client, reward) {
-  const { getEmoji } = require('./utils/emojis');
-  if (Array.isArray(reward.emojiName)) {
-    return reward.emojiName.map(n => getEmoji(client, n, '')).join('') || reward.fallback;
-  }
-  return getEmoji(client, reward.emojiName, reward.fallback);
-}
+module.exports = {
+  name: 'boxes',
+  adminOnly: false,
+  ownerOnly: false,
 
-function getRewardLabel(client, reward) {
-  return `${reward.name} ${getRewardEmoji(client, reward)}`;
-}
+  async execute(message, args) {
+    const type = args[0]?.toLowerCase();
 
-module.exports = { BOXES, rollReward, getRewardLabel };
+    if (!type || !BOXES[type]) {
+      return message.reply(
+        `📦 Available boxes:\n` +
+        Object.entries(BOXES)
+          .map(([k, v]) => `• **${k}** (${v.emoji}) - ${v.cost} coins`)
+          .join('\n')
+      );
+    }
+
+    const userId = message.author.id;
+    const box = BOXES[type];
+
+    const balance = db.getBalance(userId);
+
+    if (balance < box.cost) {
+      return message.reply(`❌ You need ${box.cost} coins for this box.`);
+    }
+
+    db.removeCoins(userId, box.cost);
+
+    const reward = rollReward(box);
+
+    db.addItem(userId, reward.name, 1);
+
+    const newBalance = db.getBalance(userId);
+
+    return message.reply(
+      `📦 You opened a **${box.name}** ${box.emoji}\n` +
+      `🎁 You got **${reward.name}**\n` +
+      `💰 Balance: ${newBalance.toLocaleString()} coins`
+    );
+  },
+};
