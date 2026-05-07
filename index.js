@@ -11,11 +11,11 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./database');
 
-// 🔥 FIX: fallback token support
+// 🔥 TOKEN (fallback safe)
 const TOKEN = process.env.TOKEN || process.env.BOT_TOKEN;
 
 if (!TOKEN) {
-  console.error("❌ No bot token found! Set TOKEN or BOT_TOKEN in environment variables.");
+  console.error("❌ No bot token found in environment variables!");
   process.exit(1);
 }
 
@@ -56,8 +56,8 @@ client.commands = new Collection();
 async function main() {
   await db.init();
 
-  // LOAD COMMANDS
-  const commandsPath = path.join(__dirname, 'commands');
+  // ✅ FIXED PATH (your real structure)
+  const commandsPath = path.join(__dirname, 'src', 'commands');
 
   if (!fs.existsSync(commandsPath)) {
     console.error("❌ Commands folder not found:", commandsPath);
@@ -75,17 +75,17 @@ async function main() {
           console.log(`⚠️ Invalid command file: ${file}`);
         }
       } catch (err) {
-        console.error(`❌ Error loading command ${file}:`, err);
+        console.error(`❌ Failed loading ${file}:`, err);
       }
     }
   }
 
-  // READY EVENT
+  // READY
   client.once(Events.ClientReady, () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
   });
 
-  // MESSAGE EVENT
+  // MESSAGE HANDLER
   client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot || !message.guild) return;
 
@@ -93,7 +93,7 @@ async function main() {
       PermissionsBitField.Flags.Administrator
     );
 
-    // OWNER MESSAGE
+    // OWNER TEST
     if (message.author.id === OWNER_ID && message.content === 'Hi kids') {
       return message.reply('Hi Master! Was it a hardworking day! Keep up the good work :)');
     }
@@ -105,9 +105,7 @@ async function main() {
 
       const command = client.commands.get(commandName);
 
-      if (!command) {
-        return message.reply("❌ Command not found.");
-      }
+      if (!command) return message.reply("❌ Unknown command.");
 
       if (!COMMAND_CHANNELS.includes(message.channel.id) && !isAdmin) {
         return message.reply(`❌ Use commands in <#${COMMAND_CHANNELS[0]}>`);
@@ -117,7 +115,7 @@ async function main() {
         await command.execute(message, args, client);
       } catch (err) {
         console.error(err);
-        message.reply('❌ Error running command.');
+        message.reply('❌ Command error.');
       }
 
       return;
@@ -134,12 +132,10 @@ async function main() {
     const userId = message.author.id;
     const now = Date.now();
 
-    // SPAM CHECK
     const last = userLastMessage.get(userId) || 0;
     if (now - last < SPAM_COOLDOWN_MS) return;
     userLastMessage.set(userId, now);
 
-    // REWARD COOLDOWN
     const lastReward = userRewardCooldown.get(userId) || 0;
     if (now - lastReward < REWARD_COOLDOWN_MS) return;
 
@@ -153,9 +149,7 @@ async function main() {
         embeds: [
           new EmbedBuilder()
             .setColor(0x2ecc71)
-            .setDescription(
-              `💬 ${message.author} earned **${MESSAGE_REWARD_AMOUNT} coins**!`
-            ),
+            .setDescription(`💬 ${message.author} earned **${MESSAGE_REWARD_AMOUNT} coins**!`),
         ],
       });
     }
