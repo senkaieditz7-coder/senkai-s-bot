@@ -1,21 +1,31 @@
-const db = require('../database');
+const db = require('./database');
 
 module.exports = {
   name: 'removecoins',
   adminOnly: true,
   ownerOnly: false,
+
   async execute(message, args) {
     const target = message.mentions.users.first();
     const amount = parseInt(args[1]);
 
-    if (!target) return message.reply('❌ Please mention a user. Usage: `£removecoins @user amount`');
-    if (!amount || amount <= 0) return message.reply('❌ Amount must be a positive number.');
+    if (!target) {
+      return message.reply('❌ Please mention a user. Usage: £removecoins @user amount');
+    }
 
-    const currentBalance = db.getBalance(target.id);
+    if (!amount || isNaN(amount) || amount <= 0) {
+      return message.reply('❌ Amount must be a positive number.');
+    }
+
+    const currentBalance = db.getBalance(target.id) ?? 0;
+
     const deducted = Math.min(amount, currentBalance);
-    db.setCoins(target.id, Math.max(0, currentBalance - amount));
-    const newBalance = db.getBalance(target.id);
+    const newBalance = Math.max(0, currentBalance - amount);
 
-    await message.reply(`❌ Removed **${deducted.toLocaleString()} coins** from ${target}. They now have **${newBalance.toLocaleString()} coins**.`);
+    db.setCoins(target.id, newBalance);
+
+    return message.reply(
+      `❌ Removed **${deducted.toLocaleString()} coins** from ${target}. They now have **${newBalance.toLocaleString()} coins**.`
+    );
   },
 };
