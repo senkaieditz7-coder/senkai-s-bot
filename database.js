@@ -1,166 +1,126 @@
-const initSqlJs = require('sql.js');
 const fs = require('fs');
-const path = require('path');
 
-// IMPORTANT FIX: ensure "data" is always a folder
-const dbDir = path.join(__dirname, 'data');
-if (fs.existsSync(dbDir) && !fs.lstatSync(dbDir).isDirectory()) {
-  fs.unlinkSync(dbDir); // removes wrong file if it exists
-}
-if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+const DB_PATH = './data.json';
 
-const dbPath = path.join(dbDir, 'economy.db');
-
-let SQL;
-let db;
-let isReady = false;
-
-// INIT DATABASE
-async function init() {
-  SQL = await initSqlJs();
-
-  if (fs.existsSync(dbPath)) {
-    const fileBuffer = fs.readFileSync(dbPath);
-    db = new SQL.Database(fileBuffer);
-  } else {
-    db = new SQL.Database();
+// ---------------- SAFE INIT ----------------
+function loadDB() {
+  if (!fs.existsSync(DB_PATH)) {
+    const initial = {
+      users: {},
+      redeemed: {}
+    };
+    fs.writeFileSync(DB_PATH, JSON.stringify(initial, null, 2));
   }
 
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      user_id TEXT PRIMARY KEY,
-      coins INTEGER DEFAULT 0,
-      last_daily INTEGER DEFAULT 0,
-      last_message_reward INTEGER DEFAULT 0,
-      message_count INTEGER DEFAULT 0,
-      last_luck INTEGER DEFAULT 0
-    );
-
-    CREATE TABLE IF NOT EXISTS inventory (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id TEXT,
-      item_name TEXT,
-      quantity INTEGER DEFAULT 1,
-      UNIQUE(user_id, item_name)
-    );
-
-    CREATE TABLE IF NOT EXISTS redeemed_codes (
-      user_id TEXT,
-      code TEXT,
-      redeemed_at INTEGER,
-      PRIMARY KEY (user_id, code)
-    );
-  `);
-
-  save();
-  isReady = true;
+  return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
 }
 
-// SAVE DB
-function save() {
-  if (!db) return;
-  const data = db.export();
-  fs.writeFileSync(dbPath, Buffer.from(data));
+function saveDB(data) {
+  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// QUERY
-function query(sql, params = []) {
-  const stmt = db.prepare(sql);
-  stmt.bind(params);
-
-  const rows = [];
-  while (stmt.step()) rows.push(stmt.getAsObject());
-
-  stmt.free();
-  return rows;
-}
-
-// RUN
-function run(sql, params = []) {
-  db.run(sql, params);
-  save();
-}
-
-// USER SYSTEM
-function getUser(userId) {
-  let rows = query('SELECT * FROM users WHERE user_id = ?', [userId]);
-
-  if (rows.length === 0) {
-    run('INSERT INTO users (user_id) VALUES (?)', [userId]);
-    rows = query('SELECT * FROM users WHERE user_id = ?', [userId]);
+// ---------------- USER SYSTEM ----------------
+function getUser(data, userId) {
+  if (!data.users[userId]) {
+    data.users[userId] = {
+      coins: 0,
+      inventory: {}
+    };
   }
-
-  return rows[0];
+  return data.users[userId];
 }
 
-// ECONOMY
+// ---------------- COINS ----------------
 function getBalance(userId) {
-  return getUser(userId).coins;
+  const data = loadDB();
+  return getUser(data, userId).coins;
 }
 
 function addCoins(userId, amount) {
-  getUser(userId);
-  run('UPDATE users SET coins = coins + ? WHERE user_id = ?', [amount, userId]);
+  const data = loadDB();
+  const user = getUser(data, userId);
+
+  user.coins += amount;
+  saveDB(data);
 }
 
 function removeCoins(userId, amount) {
-  const user = getUser(userId);
-  if (user.coins < amount) return false;
+  const data = loadDB();
+  const user = getUser(data, userId);
 
-  run('UPDATE users SET coins = coins - ? WHERE user_id = ?', [amount, userId]);
-  return true;
+  user.coins = Math.max(0, user.coins - amount);
+  saveDB(data);
 }
 
-// INVENTORY
-function addItem(userId, item, qty = 1) {
-  getUser(userId);
+// ---------------- INVENTORY ----------------
+function addItem(userId, item, amount = 1) {
+  const data = loadDB();
+  const user = getUser(data, userId);
 
-  run(`
-    INSERT INTO inventory (user_id, item_name, quantity)
-    VALUES (?, ?, ?)
-    ON CONFLICT(user_id, item_name)
-    DO UPDATE SET quantity = quantity + ?
-  `, [userId, item, qty, qty]);
+  user.inventory[item] = (user.inventory[item] || 0) + amount;
+  saveDB(data);
 }
 
 function getInventory(userId) {
-  return query('SELECT item_name, quantity FROM inventory WHERE user_id = ?', [userId]);
+  const data = loadDB();
+  return getUser(data, userId).inventory;
 }
 
-// DAILY / LUCK
-function getLastDaily(userId) {
-  return getUser(userId).last_daily || 0;
+function resetInventory(userId) {
+  const data = loadDB();
+  const user = getUser(data, userId);
+
+  user.inventory = {};
+  saveDB(data);
 }
 
-function setLastDaily(userId, time) {
-  run('UPDATE users SET last_daily = ? WHERE user_id = ?', [time, userId]);
-}
-
-function getLastLuck(userId) {
-  return getUser(userId).last_luck || 0;
-}
-
-function setLastLuck(userId, time) {
-  run('UPDATE users SET last_luck = ? WHERE user_id = ?', [time, userId]);
-}
-
-// REDEEM SYSTEM
+// ---------------- REDEEM SYSTEM ----------------
 function hasRedeemedCode(userId, code) {
-  const rows = query(
-    'SELECT 1 FROM redeemed_codes WHERE user_id = ? AND code = ?',
-    [userId, code]
-  );
-  return rows.length > 0;
+  const data = loadDB();
+  return data.redeemed[userId]?.includes(code);
 }
 
 function markCodeRedeemed(userId, code) {
-  run(
-    'INSERT OR IGNORE INTO redeemed_codes (user_id, code, redeemed_at) VALUES (?, ?, ?)',
-    [userId, code, Date.now()]
-  );
+  const data = loadDB();
+
+  if (!data.redeemed[userId]) {
+    data.redeemed[userId] = [];
+  }
+
+  data.redeemed[userId].push(code);
+  saveDB(data);
 }
 
-// EXPORT
+// ---------------- RESET SYSTEM ----------------
+function resetAllCoins() {
+  const data = loadDB();
+
+  for (const userId in data.users) {
+    data.users[userId].coins = 0;
+  }
+
+  saveDB(data);
+}
+
+// ---------------- LEADERBOARD (FIXED) ----------------
+function getLeaderboard() {
+  const data = loadDB();
+
+  return Object.entries(data.users)
+    .map(([id, user]) => ({
+      id,
+      coins: user.coins || 0,
+    }))
+    .sort((a, b) => b.coins - a.coins)
+    .slice(0, 10);
+}
+
+// ---------------- INIT ----------------
+function init() {
+  loadDB();
+}
+
+// ---------------- EXPORTS ----------------
 module.exports = {
   init,
 
@@ -168,18 +128,14 @@ module.exports = {
   addCoins,
   removeCoins,
 
-  getInventory,
   addItem,
-
-  getLastDaily,
-  setLastDaily,
-
-  getLastLuck,
-  setLastLuck,
+  getInventory,
+  resetInventory,
 
   hasRedeemedCode,
   markCodeRedeemed,
 
-  resetAllCoins: () => run('UPDATE users SET coins = 0'),
-  resetInventory: (userId) => run('DELETE FROM inventory WHERE user_id = ?', [userId]),
+  resetAllCoins,
+
+  getLeaderboard,
 };
