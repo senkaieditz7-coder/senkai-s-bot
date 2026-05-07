@@ -11,7 +11,13 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./database');
 
-const TOKEN = process.env.TOKEN;
+// 🔥 FIX: fallback token support
+const TOKEN = process.env.TOKEN || process.env.BOT_TOKEN;
+
+if (!TOKEN) {
+  console.error("❌ No bot token found! Set TOKEN or BOT_TOKEN in environment variables.");
+  process.exit(1);
+}
 
 // CONFIG
 const PREFIX = '£';
@@ -52,13 +58,24 @@ async function main() {
 
   // LOAD COMMANDS
   const commandsPath = path.join(__dirname, 'commands');
-  if (fs.existsSync(commandsPath)) {
+
+  if (!fs.existsSync(commandsPath)) {
+    console.error("❌ Commands folder not found:", commandsPath);
+  } else {
     const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
 
     for (const file of files) {
-      const cmd = require(path.join(commandsPath, file));
-      if (cmd.name && cmd.execute) {
-        client.commands.set(cmd.name, cmd);
+      try {
+        const cmd = require(path.join(commandsPath, file));
+
+        if (cmd.name && cmd.execute) {
+          client.commands.set(cmd.name, cmd);
+          console.log(`✅ Loaded command: ${cmd.name}`);
+        } else {
+          console.log(`⚠️ Invalid command file: ${file}`);
+        }
+      } catch (err) {
+        console.error(`❌ Error loading command ${file}:`, err);
       }
     }
   }
@@ -76,7 +93,7 @@ async function main() {
       PermissionsBitField.Flags.Administrator
     );
 
-    // OWNER COMMAND
+    // OWNER MESSAGE
     if (message.author.id === OWNER_ID && message.content === 'Hi kids') {
       return message.reply('Hi Master! Was it a hardworking day! Keep up the good work :)');
     }
@@ -87,7 +104,10 @@ async function main() {
       const commandName = args.shift()?.toLowerCase();
 
       const command = client.commands.get(commandName);
-      if (!command) return;
+
+      if (!command) {
+        return message.reply("❌ Command not found.");
+      }
 
       if (!COMMAND_CHANNELS.includes(message.channel.id) && !isAdmin) {
         return message.reply(`❌ Use commands in <#${COMMAND_CHANNELS[0]}>`);
@@ -143,7 +163,6 @@ async function main() {
 
   client.on('error', console.error);
 
-  // IMPORTANT: no await here
   client.login(TOKEN);
 }
 
