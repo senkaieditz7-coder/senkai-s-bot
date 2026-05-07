@@ -4,24 +4,35 @@ const {
   ButtonStyle,
 } = require('discord.js');
 
+const db = require('./database');
+
+const OWNER_ID = 'YOUR_DISCORD_ID_HERE';
+
 module.exports = {
   name: 'resetcoins',
   adminOnly: false,
   ownerOnly: true,
+
   async execute(message) {
+    // OWNER CHECK
+    if (message.author.id !== OWNER_ID) {
+      return message.reply('❌ Owner only command.');
+    }
+
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId('resetcoins_confirm')
         .setLabel('Yes, reset all coins')
         .setStyle(ButtonStyle.Danger),
+
       new ButtonBuilder()
         .setCustomId('resetcoins_cancel')
         .setLabel('Cancel')
         .setStyle(ButtonStyle.Secondary)
     );
 
-    await message.reply({
-      content: '⚠️ **Are you sure?** This will set **all users\' coins to 0**. This cannot be undone.',
+    return message.reply({
+      content: '⚠️ This will set ALL users coins to **0**. Are you sure?',
       components: [row],
     });
   },
