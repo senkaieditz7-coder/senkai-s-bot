@@ -3,7 +3,6 @@ const path = require('path');
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 
 const db = require('./database');
-const { OWNER_ID } = require('./variables'); // your ID file
 
 const client = new Client({
   intents: [
@@ -16,17 +15,13 @@ const client = new Client({
 client.commands = new Collection();
 
 const PREFIX = '£';
-
-// folder where commands are stored (same folder as index.js)
 const COMMAND_DIR = __dirname;
 
 // LOAD COMMANDS
 function loadCommands() {
   const files = fs.readdirSync(COMMAND_DIR)
-    .filter(file => file.endsWith('.js'))
-    .filter(file => !['index.js', 'database.js', 'boxes.js', 'variables.js'].includes(file));
-
-  let loaded = 0;
+    .filter(f => f.endsWith('.js'))
+    .filter(f => !['index.js', 'database.js', 'boxes.js'].includes(f));
 
   for (const file of files) {
     try {
@@ -39,14 +34,12 @@ function loadCommands() {
 
       client.commands.set(command.name, command);
       console.log(`✅ Loaded command: ${command.name}`);
-      loaded++;
     } catch (err) {
       console.log(`❌ Error loading ${file}: ${err.message}`);
     }
   }
 
   console.log(`📦 FINAL COMMANDS: [${[...client.commands.keys()].join(', ')}]`);
-  if (loaded === 0) console.log('❌ No commands loaded!');
 }
 
 // MESSAGE HANDLER
@@ -60,21 +53,34 @@ client.on('messageCreate', async (message) => {
   const command = client.commands.get(cmdName);
   if (!command) return message.reply('❌ Unknown command.');
 
-  // OWNER CHECK
-  if (command.ownerOnly && message.author.id !== OWNER_ID) {
-    return message.reply('❌ This command is owner-only.');
-  }
-
-  // ADMIN CHECK (optional: only works if you use Discord permissions)
-  if (command.adminOnly && !message.member.permissions.has('Administrator')) {
-    return message.reply('❌ Admin only command.');
-  }
-
   try {
     await command.execute(message, args, client);
   } catch (err) {
     console.log(err);
     message.reply('❌ Command error.');
+  }
+});
+
+// BUTTON HANDLER (RESET COINS SYSTEM)
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isButton()) return;
+
+  const db = require('./database');
+
+  if (interaction.customId === 'resetcoins_cancel') {
+    return interaction.update({
+      content: '❌ Reset cancelled.',
+      components: [],
+    });
+  }
+
+  if (interaction.customId === 'resetcoins_confirm') {
+    db.resetAllCoins();
+
+    return interaction.update({
+      content: '✅ All coins have been reset to 0.',
+      components: [],
+    });
   }
 });
 
