@@ -4,14 +4,15 @@ module.exports = {
   ownerOnly: false,
 
   async execute(message, args, client) {
-    const commands = client.commands;
-
-    const list = [...commands.values()]
-      .map(cmd => `• £${cmd.name}`)
+    const commands = [...client.commands.values()]
+      .map(cmd => `£${cmd.name}`)
       .join('\n');
 
     return message.reply(
-      `📜 **Available Commands**\n\n${list}\n\n💡 Use £<command> to run a command`
+      "📜 **Commands List**\n\n" +
+      "```yaml\n" +
+      commands +
+      "\n```"
     );
   },
 };
