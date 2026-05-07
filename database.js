@@ -2,8 +2,11 @@ const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
 
+// ✅ FIXED: stable data folder inside project
 const dbDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
 
 const dbPath = path.join(dbDir, 'economy.db');
 
@@ -59,7 +62,7 @@ function save() {
   fs.writeFileSync(dbPath, Buffer.from(data));
 }
 
-// SAFE QUERY
+// QUERY
 function query(sql, params = []) {
   if (!db) return [];
 
@@ -73,7 +76,7 @@ function query(sql, params = []) {
   return rows;
 }
 
-// SAFE RUN
+// RUN
 function run(sql, params = []) {
   if (!db) return;
 
@@ -81,12 +84,12 @@ function run(sql, params = []) {
   save();
 }
 
-// WAIT FOR DB
+// READY CHECK
 function ensureReady() {
   if (!isReady) throw new Error('Database not initialized. Call init() first.');
 }
 
-// USER SYSTEM
+// USER
 function getUser(userId) {
   ensureReady();
 
@@ -183,6 +186,15 @@ function setLastLuck(userId, time) {
   run('UPDATE users SET last_luck = ? WHERE user_id = ?', [time, userId]);
 }
 
+// RESET
+function resetAllCoins() {
+  run('UPDATE users SET coins = 0');
+}
+
+function resetInventory(userId) {
+  run('DELETE FROM inventory WHERE user_id = ?', [userId]);
+}
+
 // EXPORT
 module.exports = {
   init,
@@ -205,6 +217,6 @@ module.exports = {
   getLastLuck,
   setLastLuck,
 
-  resetAllCoins: () => run('UPDATE users SET coins = 0'),
-  resetInventory: (userId) => run('DELETE FROM inventory WHERE user_id = ?', [userId]),
+  resetAllCoins,
+  resetInventory,
 };
