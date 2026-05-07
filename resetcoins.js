@@ -5,8 +5,7 @@ const {
 } = require('discord.js');
 
 const db = require('./database');
-
-const OWNER_ID = 'YOUR_DISCORD_ID_HERE';
+const { OWNER_ID } = require('./variables');
 
 module.exports = {
   name: 'resetcoins',
@@ -14,7 +13,6 @@ module.exports = {
   ownerOnly: true,
 
   async execute(message) {
-    // OWNER CHECK
     if (message.author.id !== OWNER_ID) {
       return message.reply('❌ Owner only command.');
     }
