@@ -15,7 +15,7 @@ const db = require('./database');
 const TOKEN = process.env.TOKEN || process.env.BOT_TOKEN;
 
 if (!TOKEN) {
-  console.error("❌ No bot token found in environment variables!");
+  console.error("❌ No bot token found!");
   process.exit(1);
 }
 
@@ -23,7 +23,6 @@ if (!TOKEN) {
 const PREFIX = '£';
 const OWNER_ID = '1461290677647179816';
 
-// CHANNELS
 const COMMAND_CHANNELS = [
   '1492918524878786563',
   '1492918525105275033'
@@ -49,36 +48,13 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// 🔥 AUTO FIND COMMAND FOLDER (FIX FOR NEXUS PATH ISSUES)
-function findCommandsPath() {
-  const possiblePaths = [
-    path.join(__dirname, 'commands'),
-    path.join(__dirname, 'src', 'commands'),
-    path.join(__dirname, 'discord-bot', 'src', 'commands'),
-  ];
-
-  for (const p of possiblePaths) {
-    if (fs.existsSync(p)) return p;
-  }
-
-  return null;
-}
-
-async function loadCommands() {
-  const commandsPath = findCommandsPath();
-
-  if (!commandsPath) {
-    console.error("❌ Commands folder not found in any known location!");
-    return;
-  }
-
-  console.log("📁 Using commands folder:", commandsPath);
-
-  const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
+// 🔥 LOAD COMMANDS FROM ROOT (YOUR STRUCTURE)
+function loadCommands() {
+  const files = fs.readdirSync(__dirname).filter(file => file.endsWith('.js') && file !== 'index.js');
 
   for (const file of files) {
     try {
-      const cmd = require(path.join(commandsPath, file));
+      const cmd = require(path.join(__dirname, file));
 
       if (!cmd.name || !cmd.execute) {
         console.log(`⚠️ Skipped invalid command: ${file}`);
@@ -98,7 +74,7 @@ async function loadCommands() {
 async function main() {
   await db.init();
 
-  await loadCommands();
+  loadCommands();
 
   // READY
   client.once(Events.ClientReady, () => {
@@ -115,7 +91,7 @@ async function main() {
 
     // OWNER TEST
     if (message.author.id === OWNER_ID && message.content === 'Hi kids') {
-      return message.reply('Hi Master! Keep going 💪');
+      return message.reply('Hi Master! 💪');
     }
 
     // PREFIX COMMANDS
