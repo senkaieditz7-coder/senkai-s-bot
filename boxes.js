@@ -12,6 +12,7 @@ const BOXES = {
       { type: 'item', name: 'Portal Fruit', chance: 15 },
     ],
   },
+
   premium: {
     name: 'Premium Box',
     emoji: '🟪',
@@ -19,10 +20,11 @@ const BOXES = {
     rewards: [
       { type: 'item', name: 'T-Rex Fruit', chance: 40 },
       { type: 'item', name: 'Pain Fruit', chance: 35 },
-      { type: 'item', name: 'Buddha & Portal Fruit', chance: 18 },
+      { type: 'item', name: 'Buddha Fruit', chance: 18 },
       { type: 'item', name: 'Dough Fruit', chance: 7 },
     ],
   },
+
   luxury: {
     name: 'Luxury Box',
     emoji: '🟨',
@@ -36,7 +38,7 @@ const BOXES = {
   },
 };
 
-// roll reward
+// 🎲 reward roller
 function rollReward(box) {
   const roll = Math.random() * 100;
   let sum = 0;
@@ -51,8 +53,6 @@ function rollReward(box) {
 
 module.exports = {
   name: 'boxes',
-  adminOnly: false,
-  ownerOnly: false,
 
   async execute(message, args) {
     const type = args[0]?.toLowerCase();
@@ -69,7 +69,7 @@ module.exports = {
     const userId = message.author.id;
     const box = BOXES[type];
 
-    const balance = db.getBalance(userId);
+    const balance = db.getBalance(userId) ?? 0;
 
     if (balance < box.cost) {
       return message.reply(`❌ You need ${box.cost} coins for this box.`);
@@ -81,12 +81,15 @@ module.exports = {
 
     db.addItem(userId, reward.name, 1);
 
-    const newBalance = db.getBalance(userId);
+    const newBalance = db.getBalance(userId) ?? 0;
 
     return message.reply(
-      `📦 You opened a **${box.name}** ${box.emoji}\n` +
+      `📦 You opened **${box.name}** ${box.emoji}\n` +
       `🎁 You got **${reward.name}**\n` +
       `💰 Balance: ${newBalance.toLocaleString()} coins`
     );
   },
 };
+
+// ✅ IMPORTANT EXPORT (fix for shop.js)
+module.exports.BOXES = BOXES;
