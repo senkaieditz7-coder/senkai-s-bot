@@ -49,7 +49,7 @@ function loadCommands() {
 }
 
 
-// ---------------- MESSAGE HANDLER (ONLY ONCE) ----------------
+// ---------------- MESSAGE HANDLER ----------------
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
@@ -58,7 +58,6 @@ client.on('messageCreate', async (message) => {
   const cmdName = args.shift().toLowerCase();
 
   const command = client.commands.get(cmdName);
-
   if (!command) return message.reply('❌ Unknown command.');
 
   try {
@@ -99,8 +98,8 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 
-// ---------------- READY EVENT ----------------
-client.once('clientReady', async () => {
+// ---------------- READY EVENT (FIXED) ----------------
+client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
   try {
