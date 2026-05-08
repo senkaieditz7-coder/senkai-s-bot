@@ -1,3 +1,4 @@
+console.log("BOT INSTANCE STARTED:", process.pid, new Date().toISOString());
 const fs = require('fs');
 const path = require('path');
 const {
