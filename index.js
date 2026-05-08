@@ -112,6 +112,14 @@ client.on('interactionCreate', async (interaction) => {
   if (!type) return;
 
   const box = BOXES[type];
+
+  if (!box) {
+    return interaction.reply({
+      content: '❌ Box not found.',
+      ephemeral: true,
+    });
+  }
+
   const balance = db.getBalance(userId) ?? 0;
 
   if (balance < box.cost) {
