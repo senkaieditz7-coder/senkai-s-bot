@@ -1,4 +1,5 @@
 console.log("BOT INSTANCE STARTED:", process.pid, new Date().toISOString());
+
 const fs = require('fs');
 const path = require('path');
 const {
@@ -9,6 +10,7 @@ const {
 
 const db = require('./database');
 const { OWNER_ID } = require('./variables');
+const { BOXES, rollReward } = require('./boxes');
 
 const client = new Client({
   intents: [
@@ -27,7 +29,7 @@ const PREFIX = '£';
 function loadCommands() {
   const files = fs.readdirSync(__dirname).filter(file =>
     file.endsWith('.js') &&
-    !['index.js', 'database.js', 'variables.js'].includes(file)
+    !['index.js', 'database.js', 'variables.js', 'boxes.js'].includes(file)
   );
 
   for (const file of files) {
@@ -70,10 +72,13 @@ client.on('messageCreate', async (message) => {
 });
 
 
-// ---------------- BUTTON HANDLER ----------------
+// ---------------- INTERACTION HANDLER (ALL BUTTONS) ----------------
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
 
+  const userId = interaction.user.id;
+
+  // ---------------- RESET COINS ----------------
   if (interaction.customId === 'resetcoins_cancel') {
     return interaction.update({
       content: '❌ Reset cancelled.',
@@ -82,7 +87,7 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.customId === 'resetcoins_confirm') {
-    if (interaction.user.id !== OWNER_ID) {
+    if (userId !== OWNER_ID) {
       return interaction.reply({
         content: '❌ Only owner can use this.',
         ephemeral: true,
@@ -96,10 +101,40 @@ client.on('interactionCreate', async (interaction) => {
       components: [],
     });
   }
+
+  // ---------------- SHOP BUTTONS ----------------
+  let type = null;
+
+  if (interaction.customId === 'buy_rare') type = 'rare';
+  if (interaction.customId === 'buy_premium') type = 'premium';
+  if (interaction.customId === 'buy_luxury') type = 'luxury';
+
+  if (!type) return;
+
+  const box = BOXES[type];
+  const balance = db.getBalance(userId) ?? 0;
+
+  if (balance < box.cost) {
+    return interaction.reply({
+      content: `❌ You need ${box.cost} coins.`,
+      ephemeral: true,
+    });
+  }
+
+  db.removeCoins(userId, box.cost);
+
+  const reward = rollReward(box);
+
+  db.addItem(userId, reward.name, 1);
+
+  return interaction.reply({
+    content: `📦 You opened **${box.name}** and got **${reward.name}** 🎁`,
+    ephemeral: true,
+  });
 });
 
 
-// ---------------- READY EVENT (FIXED) ----------------
+// ---------------- READY EVENT ----------------
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
